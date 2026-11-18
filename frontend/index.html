@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>云东AI购 · 自营 B2C 商城</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: "Microsoft YaHei", system-ui, sans-serif; background: #f5f6f8; color: #222; }
+  header { background: #ff5000; color: #fff; padding: 14px 24px; display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+  header h1 { font-size: 20px; margin: 0; letter-spacing: 1px; }
+  .search { display: flex; flex: 1; min-width: 240px; }
+  .search input { flex: 1; padding: 8px 12px; border: none; border-radius: 4px 0 0 4px; outline: none; }
+  .search button { padding: 8px 16px; border: none; background: #222; color: #fff; border-radius: 0 4px 4px 0; cursor: pointer; }
+  #user { font-size: 13px; }
+  #user button { border: 1px solid #fff; background: transparent; color: #fff; padding: 5px 10px; border-radius: 4px; cursor: pointer; }
+  main { max-width: 1200px; margin: 0 auto; padding: 16px 24px 48px; }
+  .cats { display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0 18px; }
+  .cats button { border: 1px solid #ddd; background: #fff; padding: 6px 14px; border-radius: 14px; cursor: pointer; font-size: 13px; }
+  .cats button.on { border-color: #ff5000; color: #ff5000; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; }
+  .card { background: #fff; border-radius: 8px; overflow: hidden; display: flex; flex-direction: column; transition: box-shadow .2s; }
+  .card:hover { box-shadow: 0 6px 18px rgba(0,0,0,.1); }
+  .card img { width: 100%; aspect-ratio: 1/1; object-fit: cover; background: #eef0f3; }
+  .card .body { padding: 10px 12px 14px; display: flex; flex-direction: column; gap: 6px; flex: 1; }
+  .card .name { font-size: 14px; line-height: 1.45; height: 40px; overflow: hidden; }
+  .price { color: #ff5000; font-size: 18px; font-weight: 700; }
+  .origin { color: #999; text-decoration: line-through; font-size: 12px; margin-left: 6px; font-weight: 400; }
+  .meta { color: #999; font-size: 12px; display: flex; justify-content: space-between; }
+  .card button { margin-top: auto; border: none; background: #ff5000; color: #fff; padding: 8px; border-radius: 4px; cursor: pointer; }
+  .card button:disabled { background: #ccc; cursor: not-allowed; }
+  .pager { display: flex; gap: 10px; justify-content: center; align-items: center; margin-top: 22px; font-size: 13px; }
+  .pager button { padding: 6px 14px; border: 1px solid #ddd; background: #fff; border-radius: 4px; cursor: pointer; }
+  .empty { text-align: center; color: #999; padding: 60px 0; grid-column: 1/-1; }
+  #toast { position: fixed; left: 50%; bottom: 40px; transform: translateX(-50%); background: rgba(0,0,0,.78); color: #fff; padding: 9px 18px; border-radius: 4px; font-size: 13px; opacity: 0; transition: opacity .25s; pointer-events: none; }
+  #toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+<header>
+  <h1>云东AI购</h1>
+  <div class="search">
+    <input id="kw" placeholder="搜索商品，如：耳机" />
+    <button id="searchBtn">搜索</button>
+  </div>
+  <div id="user"><button id="loginBtn">体验登录</button></div>
+</header>
+
+<main>
+  <div class="cats" id="cats"></div>
+  <div class="grid" id="grid"></div>
+  <div class="pager">
+    <button id="prev">上一页</button>
+    <span id="pageInfo">第 1 页</span>
+    <button id="next">下一页</button>
+  </div>
+</main>
+<div id="toast"></div>
+
+<script>
+const API = "/api/v1";
+const state = { page: 1, size: 8, keyword: "", categoryId: null, sort: "default" };
+const $ = (id) => document.getElementById(id);
+
+function toast(msg) {
+  const el = $("toast");
+  el.textContent = msg;
+  el.classList.add("show");
+  clearTimeout(el._timer);
+  el._timer = setTimeout(() => el.classList.remove("show"), 2000);
+}
+
+function token() { return localStorage.getItem("token"); }
+function fmt(v) { return "¥" + Number(v).toFixed(2); }
+
+async function request(path, options = {}) {
+  const headers = { "Content-Type": "application/json", ...(options.headers || {}) };
+  if (token()) headers.Authorization = "Bearer " + token();
+  const res = await fetch(API + path, { ...options, headers });
+  if (res.status === 204) return null;
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.detail || "请求失败");
+  return data;
+}
+
+async function loadCategories() {
+  const list = await request("/categories");
+  $("cats").innerHTML = "";
+  const mk = (label, id) => {
+    const b = document.createElement("button");
+    b.textContent = label;
+    if (state.categoryId === id) b.classList.add("on");
+    b.onclick = () => { state.categoryId = id; state.page = 1; loadCategories(); loadProducts(); };
+    return b;
+  };
+  $("cats").appendChild(mk("全部", null));
+  list.forEach((c) => $("cats").appendChild(mk(c.name, c.id)));
+}
+
+async function loadProducts() {
+  const params = new URLSearchParams({ page: state.page, size: state.size, sort: state.sort });
+  if (state.keyword) params.set("keyword", state.keyword);
+  if (state.categoryId) params.set("category_id", state.categoryId);
+
+  const data = await request("/products?" + params.toString());
+  const grid = $("grid");
+  grid.innerHTML = "";
+  if (!data.items.length) {
+    grid.innerHTML = '<div class="empty">没有找到商品</div>';
+  }
+  data.items.forEach((p) => {
+    const card = document.createElement("div");
+    card.className = "card";
+    card.innerHTML = `
+      <img src="${p.main_image || "/assets/placeholder.svg"}" alt="${p.name}" />
+      <div class="body">
+        <div class="name">${p.name}</div>
+        <div><span class="price">${fmt(p.price)}</span>${p.original_price ? `<span class="origin">${fmt(p.original_price)}</span>` : ""}</div>
+        <div class="meta"><span>销量 ${p.sales}</span><span>库存 ${p.stock}</span></div>
+        <button ${p.stock <= 0 ? "disabled" : ""}>${p.stock > 0 ? "加入购物车" : "已售罄"}</button>
+      </div>`;
+    card.querySelector("button").onclick = () => addToCart(p.id);
+    grid.appendChild(card);
+  });
+
+  const pages = Math.max(1, Math.ceil(data.total / state.size));
+  $("pageInfo").textContent = `第 ${data.page} / ${pages} 页 · 共 ${data.total} 件`;
+  $("prev").disabled = data.page <= 1;
+  $("next").disabled = data.page >= pages;
+}
+
+async function demoLogin() {
+  const data = await request("/users/login", {
+    method: "POST",
+    body: JSON.stringify({ username: "demo", password: "123456" }),
+  });
+  localStorage.setItem("token", data.access_token);
+  const me = await request("/users/me");
+  $("user").innerHTML = `<span>你好，${me.nickname} ｜ 余额 ${fmt(me.balance)}</span>`;
+  toast("已登录体验账号 demo");
+}
+
+async function addToCart(productId) {
+  try {
+    if (!token()) await demoLogin();
+    await request("/cart", { method: "POST", body: JSON.stringify({ product_id: productId, quantity: 1 }) });
+    toast("已加入购物车");
+  } catch (e) {
+    toast(e.message);
+  }
+}
+
+$("searchBtn").onclick = () => { state.keyword = $("kw").value.trim(); state.page = 1; loadProducts(); };
+$("kw").addEventListener("keydown", (e) => { if (e.key === "Enter") $("searchBtn").click(); });
+$("prev").onclick = () => { if (state.page > 1) { state.page -= 1; loadProducts(); } };
+$("next").onclick = () => { state.page += 1; loadProducts(); };
+$("loginBtn").onclick = () => demoLogin().catch((e) => toast(e.message));
+
+loadCategories().catch((e) => toast(e.message));
+loadProducts().catch((e) => toast(e.message));
+</script>
+</body>
+</html>

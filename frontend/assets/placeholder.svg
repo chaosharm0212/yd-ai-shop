@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="480" height="480" viewBox="0 0 480 480">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#ffd7c2"/>
+      <stop offset="100%" stop-color="#ff5000"/>
+    </linearGradient>
+  </defs>
+  <rect width="480" height="480" fill="url(#g)"/>
+  <text x="240" y="228" font-family="Microsoft YaHei, sans-serif" font-size="42" fill="#fff" text-anchor="middle">云东AI购</text>
+  <text x="240" y="276" font-family="Microsoft YaHei, sans-serif" font-size="20" fill="#fff" opacity="0.85" text-anchor="middle">商品占位图</text>
+</svg>
